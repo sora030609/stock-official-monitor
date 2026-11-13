@@ -261,7 +261,7 @@ def integrate(state, name, events):
 def send_telegram(token, chat_id, item):
     body = json.dumps({
         "chat_id": chat_id,
-        "text": item["text"] + "\n官方來源：\n" + item["url"],
+        "text": item["text"] + "\n原文連結：\n" + item["url"],
         "link_preview_options": {"is_disabled": True},
     }, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(
@@ -295,6 +295,36 @@ def validate_config(config):
         raise MonitorError("This version requires first_run_mode=baseline.")
 
 
+NEWS = {
+    "fed_policy": ("聯準會政策", "https://www.federalreserve.gov/feeds/press_monetary.xml", True),
+    "fed_speeches": ("聯準會官員演說", "https://www.federalreserve.gov/feeds/speeches.xml", True),
+    "cna_finance": ("中央社產經證券", "https://feeds.feedburner.com/rsscna/finance", False),
+    "cna_world": ("中央社國際", "https://feeds.feedburner.com/rsscna/intworld", False),
+}
+NEWS_TERMS = "台股 美股 利率 通膨 就業 央行 關稅 制裁 出口管制 戰爭 封鎖 美債 匯率 聯準會 半導體 晶片 封裝 記憶體 光通訊 人工智慧 AI 輝達 美光 邁威爾 康寧 英特爾 諾基亞 台積電 華邦電 南亞科 全新光電 日月光 乙盛".split()
+
+def news(source, config):
+    label, url, all_items = NEWS[source]
+    request = urllib.request.Request(url, headers={"User-Agent": "StockOfficialMonitor/1.0"})
+    with urllib.request.urlopen(request, timeout=25) as response:
+        xml = ET.fromstring(response.read(4000000))
+    items = xml.findall(".//item")
+    if not items:
+        raise MonitorError("No RSS items; previous state retained.")
+    events = []
+    for row in reversed(items):
+        title = (row.findtext("title") or "").strip()
+        link = (row.findtext("link") or "").strip()
+        if not title or urllib.parse.urlparse(link).scheme not in ("http", "https"):
+            continue
+        words = NEWS_TERMS + config["taiwan_stocks"] + config["us_stocks"] + config["us_etfs"]
+        if not all_items and not any(word.lower() in title.lower() for word in words):
+            continue
+        key = (row.findtext("guid") or link).strip()
+        events.append(event(key, f"【{label}】{title}", link))
+    return events
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true",
@@ -320,6 +350,8 @@ def main():
         sources.append(("sec_" + symbol, lambda symbol=symbol: us_company(client, config, symbol)))
     if "SMH" in config["us_etfs"]:
         sources.append(("smh", lambda: smh(client, state["sources"].get("smh"))))
+    for source in NEWS:
+        sources.append((source, lambda source=source: news(source, config)))
     errors = 0
     for name, read in sources:
         try:
