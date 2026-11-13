@@ -1,0 +1,76 @@
+name: Official announcement monitor
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stock-official-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Read latest repository files
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run monitor
+        id: monitor
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -u monitor.py
+
+      - name: Save monitoring state
+        id: save
+        if: >-
+          ${{
+            always() && !cancelled() &&
+            (steps.monitor.outcome == 'success' ||
+             steps.monitor.outcome == 'failure')
+          }}
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python -m json.tool state.json > /dev/null
+
+          git add -- state.json
+
+          if git diff --cached --quiet -- state.json; then
+            echo "No state changes to save."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git commit -m "Update announcement monitoring state"
+          git push origin "HEAD:refs/heads/$DEFAULT_BRANCH"
+
+          echo "Monitoring state saved successfully."
+
+      - name: Keep state backup if saving failed
+        if: ${{ failure() && steps.save.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitoring-state-backup-${{ github.run_id }}-${{ github.run_attempt }}
+          path: state.json
+          retention-days: 3
+          if-no-files-found: error
