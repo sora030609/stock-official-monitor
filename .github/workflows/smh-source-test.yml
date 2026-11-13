@@ -1,0 +1,133 @@
+name: SMH source test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read repository files
+        uses: actions/checkout@v4
+
+      - name: Identify SMH fund
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import time
+          import urllib.error
+          import urllib.request
+
+          def fail(message):
+              print(message, flush=True)
+              raise SystemExit(1)
+
+          user_agent = os.environ.get("SEC_USER_AGENT", "").strip()
+          if (
+              "@" not in user_agent
+              or "\n" in user_agent
+              or "\r" in user_agent
+          ):
+              fail("FAIL: Check SEC_USER_AGENT secret.")
+
+          with open("config.json", encoding="utf-8") as file:
+              config = json.load(file)
+
+          etfs = config.get("us_etfs")
+          if not isinstance(etfs, list) or "SMH" not in etfs:
+              fail("FAIL: SMH is missing from us_etfs in config.json.")
+
+          url = "https://www.sec.gov/files/company_tickers_mf.json"
+          data = None
+
+          for attempt in range(1, 4):
+              try:
+                  request = urllib.request.Request(
+                      url,
+                      headers={
+                          "User-Agent": user_agent,
+                          "Accept": "application/json",
+                      },
+                  )
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      data = json.load(response)
+                  break
+
+              except urllib.error.HTTPError as error:
+                  status = error.code
+                  if status in (403, 429):
+                      fail(
+                          f"FAIL: SEC HTTP {status}. "
+                          "Access restricted; stop and try later."
+                      )
+                  if status not in (500, 502, 503, 504):
+                      fail(f"FAIL: SEC HTTP {status}.")
+                  print(
+                      f"RETRY: HTTP {status}, attempt {attempt}/3.",
+                      flush=True,
+                  )
+
+              except (
+                  urllib.error.URLError,
+                  TimeoutError,
+                  OSError,
+                  ValueError,
+              ) as error:
+                  print(
+                      f"RETRY: {type(error).__name__}, attempt {attempt}/3.",
+                      flush=True,
+                  )
+
+              if attempt < 3:
+                  time.sleep(5 * attempt)
+
+          if not isinstance(data, dict):
+              fail("FAIL: Could not read a valid SEC fund mapping.")
+
+          fields = data.get("fields")
+          records = data.get("data")
+          if not isinstance(fields, list) or not isinstance(records, list):
+              fail("FAIL: Unexpected fund mapping structure.")
+
+          print(
+              "FIELDS: " + json.dumps(fields, ensure_ascii=True),
+              flush=True,
+          )
+
+          required = {"cik", "seriesId", "classId", "symbol"}
+          if not required.issubset(fields):
+              fail("FAIL: Fund mapping fields changed; report FIELDS above.")
+
+          matches = []
+          for values in records:
+              if not isinstance(values, list) or len(values) != len(fields):
+                  fail("FAIL: Unexpected fund mapping row.")
+              row = dict(zip(fields, values))
+              if str(row["symbol"]).strip().upper() == "SMH":
+                  matches.append(row)
+
+          if len(matches) != 1:
+              fail(
+                  f"FAIL: Expected one SMH mapping; found {len(matches)}."
+              )
+
+          row = matches[0]
+          if any(not str(row[key] or "").strip() for key in required):
+              fail("FAIL: SMH mapping contains an empty identifier.")
+
+          print(
+              "SMH_MAPPING: " + json.dumps(row, ensure_ascii=True),
+              flush=True,
+          )
+          print("PASS: SMH fund identifiers found.", flush=True)
+          print("This identifies the fund; announcement monitoring is not active.")
+          PY
