@@ -1,0 +1,65 @@
+name: Telegram notification test
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Send test message
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+          chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+
+          if not token or not chat_id:
+              sys.exit("Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID secret.")
+
+          body = urllib.parse.urlencode({
+              "chat_id": chat_id,
+              "text": "台美股公告監控：通知測試成功",
+          }).encode("utf-8")
+
+          request = urllib.request.Request(
+              f"https://api.telegram.org/bot{token}/sendMessage",
+              data=body,
+              method="POST",
+          )
+
+          try:
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  result = json.load(response)
+          except urllib.error.HTTPError as error:
+              hints = {
+                  400: "Check the chat ID.",
+                  401: "Check the bot token.",
+                  403: "Open your bot, press Start, and ensure it is not blocked.",
+                  429: "Too many requests. Wait before trying again.",
+              }
+              sys.exit(
+                  f"Telegram HTTP {error.code}. "
+                  + hints.get(error.code, "Try again later.")
+              )
+          except Exception:
+              sys.exit("Network or response error. Delivery status unknown; check Telegram.")
+
+          if not result.get("ok"):
+              sys.exit("Telegram did not confirm success.")
+
+          print("Telegram confirmed: test message sent.")
+          PY
