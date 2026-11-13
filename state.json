@@ -1478,6 +1478,78 @@
         "0001137360-26-000918"
       ],
       "pending": []
+    },
+    "fed_policy": {
+      "initialized": true,
+      "seen": [
+        "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260526a.htm",
+        "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260617b.htm",
+        "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260617a.htm",
+        "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260708a.htm",
+        "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260709a.htm",
+        "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260714a.htm",
+        "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260729a.htm",
+        "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260819a.htm",
+        "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260825a.htm",
+        "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916b.htm",
+        "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm",
+        "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261007a.htm",
+        "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261013a.htm",
+        "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261028a.htm",
+        "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261112a.htm"
+      ],
+      "pending": []
+    },
+    "fed_speeches": {
+      "initialized": true,
+      "seen": [
+        "https://www.federalreserve.gov/newsevents/speech/barr20260923a.htm",
+        "https://www.federalreserve.gov/newsevents/speech/cook20260928a.htm",
+        "https://www.federalreserve.gov/newsevents/speech/bowman20260929a.htm",
+        "https://www.federalreserve.gov/newsevents/speech/barr20260929a.htm",
+        "https://www.federalreserve.gov/newsevents/speech/waller20260928a.htm",
+        "https://www.federalreserve.gov/newsevents/speech/cook20260930a.htm",
+        "https://www.federalreserve.gov/newsevents/speech/waller20261001a.htm",
+        "https://www.federalreserve.gov/newsevents/speech/jefferson20261001a.htm",
+        "https://www.federalreserve.gov/newsevents/speech/bowman20261001a.htm",
+        "https://www.federalreserve.gov/newsevents/speech/bowman20261006a.htm",
+        "https://www.federalreserve.gov/newsevents/speech/waller20261008a.htm",
+        "https://www.federalreserve.gov/newsevents/speech/bowman20261014a.htm",
+        "https://www.federalreserve.gov/newsevents/speech/waller20261110a.htm",
+        "https://www.federalreserve.gov/newsevents/speech/bowman20261110a.htm",
+        "https://www.federalreserve.gov/newsevents/speech/barr20261112a.htm"
+      ],
+      "pending": []
+    },
+    "cna_finance": {
+      "initialized": true,
+      "seen": [
+        "CNA/2026-11-13/202611130015",
+        "CNA/2026-11-13/202611130016",
+        "CNA/2026-11-13/202611130019",
+        "CNA/2026-11-13/202611130020",
+        "CNA/2026-11-13/202611130029",
+        "CNA/2026-11-13/202611130033",
+        "CNA/2026-11-13/202611130035",
+        "CNA/2026-11-13/202611130036",
+        "CNA/2026-11-13/202611130039",
+        "CNA/2026-11-13/202611130043",
+        "CNA/2026-11-13/202611130047",
+        "CNA/2026-11-13/202611130048",
+        "CNA/2026-11-13/202611130062",
+        "CNA/2026-11-13/202611130066",
+        "CNA/2026-11-13/202611130068"
+      ],
+      "pending": []
+    },
+    "cna_world": {
+      "initialized": true,
+      "seen": [
+        "CNA/2026-11-13/202611130038",
+        "CNA/2026-11-13/202611130046",
+        "CNA/2026-11-13/202611130047"
+      ],
+      "pending": []
     }
   }
 }
