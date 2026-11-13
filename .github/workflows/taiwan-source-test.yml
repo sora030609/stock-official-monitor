@@ -70,29 +70,42 @@ jobs:
               sys.exit(0)
 
           required = {"公司代號", "公司名稱", "主旨"}
+          normalized_rows = []
 
           for index, row in enumerate(rows):
               if not isinstance(row, dict):
                   sys.exit(f"FAIL: Row {index} is not an object.")
 
-              if not required.issubset(row):
+              # 清除欄位名稱前後空白，例如「主旨 」轉為「主旨」。
+              cleaned = {}
+              for key, value in row.items():
+                  clean_key = key.strip()
+                  if clean_key in cleaned:
+                      sys.exit(
+                          f"FAIL: Duplicate field after normalization in row {index}."
+                      )
+                  cleaned[clean_key] = value
+
+              if not required.issubset(cleaned):
                   print(
                       "ACTUAL_FIELDS: "
-                      + json.dumps(list(row.keys()), ensure_ascii=False),
+                      + json.dumps(list(cleaned.keys()), ensure_ascii=False),
                       flush=True,
                   )
                   print(
                       "MISSING_FIELDS: "
                       + json.dumps(
-                          sorted(required - set(row.keys())),
+                          sorted(required - set(cleaned.keys())),
                           ensure_ascii=False,
                       ),
                       flush=True,
                   )
                   sys.exit("FAIL: Unexpected announcement fields.")
 
+              normalized_rows.append(cleaned)
+
           matches = [
-              row for row in rows
+              row for row in normalized_rows
               if str(row["公司代號"]).strip() in targets
           ]
 
@@ -103,9 +116,9 @@ jobs:
               summary = {
                   "code": row["公司代號"],
                   "company": row["公司名稱"],
-                  "subject": str(row["主旨"])[:200],
+                  "subject": str(row["主旨"]).strip()[:200],
               }
-              print("MATCH " + json.dumps(summary, ensure_ascii=True))
+              print("MATCH " + json.dumps(summary, ensure_ascii=False))
 
           if not matches:
               print("No watchlist matches in the returned dataset.")
