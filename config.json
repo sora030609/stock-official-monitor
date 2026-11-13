@@ -1,0 +1,36 @@
+{
+  "check_interval_minutes": 15,
+  "timezone": "Asia/Taipei",
+  "taiwan_stocks": [
+    "2330",
+    "2344",
+    "2408",
+    "2455",
+    "3711",
+    "5243"
+  ],
+  "us_stocks": [
+    "NVDA",
+    "MU",
+    "MRVL",
+    "GLW",
+    "INTC",
+    "NOK"
+  ],
+  "us_etfs": [
+    "SMH"
+  ],
+  "sec_forms": [
+    "8-K",
+    "8-K/A",
+    "10-Q",
+    "10-Q/A",
+    "10-K",
+    "10-K/A",
+    "6-K",
+    "6-K/A",
+    "20-F",
+    "20-F/A"
+  ],
+  "first_run_mode": "baseline"
+}
