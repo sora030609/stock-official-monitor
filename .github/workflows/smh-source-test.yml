@@ -3,18 +3,14 @@ name: SMH source test
 on:
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - name: Read repository files
-        uses: actions/checkout@v4
-
-      - name: Identify SMH fund
+      - name: Test SMH filing feed
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         shell: bash
@@ -22,10 +18,12 @@ jobs:
           python3 - <<'PY'
           import json
           import os
-          import sys
+          import re
           import time
           import urllib.error
+          import urllib.parse
           import urllib.request
+          import xml.etree.ElementTree as ET
 
           def fail(message):
               print(message, flush=True)
@@ -39,95 +37,116 @@ jobs:
           ):
               fail("FAIL: Check SEC_USER_AGENT secret.")
 
-          with open("config.json", encoding="utf-8") as file:
-              config = json.load(file)
+          series = "S000034411"
 
-          etfs = config.get("us_etfs")
-          if not isinstance(etfs, list) or "SMH" not in etfs:
-              fail("FAIL: SMH is missing from us_etfs in config.json.")
+          def fetch(url):
+              parsed = urllib.parse.urlparse(url)
+              if (
+                  parsed.scheme != "https"
+                  or parsed.hostname != "www.sec.gov"
+              ):
+                  fail("FAIL: Unexpected source URL.")
 
-          url = "https://www.sec.gov/files/company_tickers_mf.json"
-          data = None
-
-          for attempt in range(1, 4):
-              try:
-                  request = urllib.request.Request(
-                      url,
-                      headers={
-                          "User-Agent": user_agent,
-                          "Accept": "application/json",
-                      },
-                  )
-                  with urllib.request.urlopen(request, timeout=30) as response:
-                      data = json.load(response)
-                  break
-
-              except urllib.error.HTTPError as error:
-                  status = error.code
-                  if status in (403, 429):
-                      fail(
-                          f"FAIL: SEC HTTP {status}. "
-                          "Access restricted; stop and try later."
+              for attempt in range(1, 4):
+                  try:
+                      time.sleep(1)
+                      request = urllib.request.Request(
+                          url,
+                          headers={"User-Agent": user_agent},
                       )
-                  if status not in (500, 502, 503, 504):
-                      fail(f"FAIL: SEC HTTP {status}.")
-                  print(
-                      f"RETRY: HTTP {status}, attempt {attempt}/3.",
-                      flush=True,
-                  )
+                      with urllib.request.urlopen(request, timeout=30) as response:
+                          final = urllib.parse.urlparse(response.geturl())
+                          if final.scheme != "https" or final.hostname != "www.sec.gov":
+                              fail("FAIL: Unexpected redirect.")
+                          return response.read()
 
-              except (
-                  urllib.error.URLError,
-                  TimeoutError,
-                  OSError,
-                  ValueError,
-              ) as error:
-                  print(
-                      f"RETRY: {type(error).__name__}, attempt {attempt}/3.",
-                      flush=True,
-                  )
+                  except urllib.error.HTTPError as error:
+                      status = error.code
+                      if status in (403, 429):
+                          fail(
+                              f"FAIL: SEC HTTP {status}. "
+                              "Access restricted; stop and try later."
+                          )
+                      if status not in (500, 502, 503, 504):
+                          fail(f"FAIL: SEC HTTP {status}.")
+                      print(
+                          f"RETRY: HTTP {status}, attempt {attempt}/3.",
+                          flush=True,
+                      )
 
-              if attempt < 3:
-                  time.sleep(5 * attempt)
+                  except (urllib.error.URLError, TimeoutError, OSError) as error:
+                      print(
+                          f"RETRY: {type(error).__name__}, attempt {attempt}/3.",
+                          flush=True,
+                      )
 
-          if not isinstance(data, dict):
-              fail("FAIL: Could not read a valid SEC fund mapping.")
+                  if attempt < 3:
+                      time.sleep(5 * attempt)
 
-          fields = data.get("fields")
-          records = data.get("data")
-          if not isinstance(fields, list) or not isinstance(records, list):
-              fail("FAIL: Unexpected fund mapping structure.")
+              fail("FAIL: Could not read SEC data after 3 attempts.")
 
-          print(
-              "FIELDS: " + json.dumps(fields, ensure_ascii=True),
-              flush=True,
-          )
+          query = urllib.parse.urlencode({
+              "action": "getcompany",
+              "CIK": series,
+              "owner": "exclude",
+              "count": "40",
+              "output": "atom",
+          })
+          feed_url = "https://www.sec.gov/cgi-bin/browse-edgar?" + query
+          payload = fetch(feed_url)
 
-          required = {"cik", "seriesId", "classId", "symbol"}
-          if not required.issubset(fields):
-              fail("FAIL: Fund mapping fields changed; report FIELDS above.")
+          try:
+              root = ET.fromstring(payload)
+          except ET.ParseError:
+              fail("FAIL: SEC response is not valid XML.")
 
-          matches = []
-          for values in records:
-              if not isinstance(values, list) or len(values) != len(fields):
-                  fail("FAIL: Unexpected fund mapping row.")
-              row = dict(zip(fields, values))
-              if str(row["symbol"]).strip().upper() == "SMH":
-                  matches.append(row)
+          ns = {"a": "http://www.w3.org/2005/Atom"}
+          if root.tag != "{http://www.w3.org/2005/Atom}feed":
+              fail("FAIL: Expected an Atom feed.")
 
-          if len(matches) != 1:
-              fail(
-                  f"FAIL: Expected one SMH mapping; found {len(matches)}."
+          entries = root.findall("a:entry", ns)
+          print(f"FEED_ENTRIES: {len(entries)}", flush=True)
+
+          if not entries:
+              fail("FAIL: Feed is empty; cannot validate SMH filtering.")
+
+          checked = 0
+          for entry in entries[:3]:
+              title = entry.findtext("a:title", default="", namespaces=ns)
+              updated = entry.findtext("a:updated", default="", namespaces=ns)
+
+              links = [
+                  link.get("href", "")
+                  for link in entry.findall("a:link", ns)
+                  if link.get("rel", "alternate") == "alternate"
+              ]
+              if not links:
+                  fail("FAIL: Filing entry has no document link.")
+
+              link = urllib.parse.urljoin(feed_url, links[0])
+              path = urllib.parse.urlparse(link).path
+              if not path.startswith("/Archives/edgar/data/1137360/"):
+                  fail("FAIL: Unexpected filing location.")
+
+              page = fetch(link).decode("utf-8", errors="replace")
+              if not re.search(r"\b" + re.escape(series) + r"\b", page):
+                  fail("FAIL: Filing page does not identify the SMH series.")
+
+              print(
+                  "VERIFIED " + json.dumps({
+                      "title": title,
+                      "updated": updated,
+                      "series": series,
+                      "url": link,
+                  }, ensure_ascii=True),
+                  flush=True,
               )
-
-          row = matches[0]
-          if any(not str(row[key] or "").strip() for key in required):
-              fail("FAIL: SMH mapping contains an empty identifier.")
+              checked += 1
 
           print(
-              "SMH_MAPPING: " + json.dumps(row, ensure_ascii=True),
+              f"PASS: SMH feed readable; {checked} filing pages identify its series.",
               flush=True,
           )
-          print("PASS: SMH fund identifiers found.", flush=True)
-          print("This identifies the fund; announcement monitoring is not active.")
+          print("A filing may cover SMH together with other funds.")
+          print("Monitoring and Telegram delivery are not active yet.")
           PY
